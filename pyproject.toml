@@ -1,0 +1,12 @@
+[project]
+name = "2026ku-invivo"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "piepy-neuro",
+]
+
+[tool.uv.sources]
+piepy-neuro = { git = "https://github.com/kaancet/piepy", rev = "big-refactor" }

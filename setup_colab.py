@@ -37,10 +37,10 @@ from urllib.request import urlretrieve
 # GitHub repository
 # ---------------------------------------------------------------------------
 
-REPO_URL = "https://github.com/kaancet/KU-invivo-neuroscience-workshop"
+REPO_URL = "https://github.com/kaancet/2026KU-invivo"
 
 # Repository location inside the temporary Colab runtime.
-REPO_DIR = Path("/content/KU-invivo-neuroscience-workshop")
+REPO_DIR = Path("/content/2026KU-invivo")
 
 
 # ---------------------------------------------------------------------------
@@ -306,13 +306,13 @@ def export_locked_requirements() -> Path:
     if requirements_file.exists():
         requirements_file.unlink()
 
+    # uv export defaults to requirements.txt format; the --format value name
+    # differs across uv versions, so we omit it to stay version-robust.
     run_command(
         [
             "uv",
             "export",
             "--frozen",
-            "--format",
-            "requirements.txt",
             "--output-file",
             str(requirements_file),
         ],
@@ -332,14 +332,16 @@ def synchronize_environment(
     requirements_file: Path,
 ) -> None:
     """
-    Synchronize Colab's existing Python environment with the
-    exact requirements generated from uv.lock.
+    Install the exact pinned requirements into Colab's existing
+    system Python environment.
 
     --system is intentional because Colab's Jupyter kernel uses
     the system Python environment.
 
-    uv pip sync removes packages that are not present in the
-    exported requirements file.
+    We use `pip install`, not `pip sync`: sync REMOVES every package
+    not in the requirements file, which would uninstall Colab's own
+    packages (e.g. google-colab, needed for drive.mount) and break the
+    runtime. install only adds/upgrades the pinned course packages.
     """
 
     print("\n" + "=" * 60)
@@ -350,8 +352,9 @@ def synchronize_environment(
         [
             "uv",
             "pip",
-            "sync",
+            "install",
             "--system",
+            "-r",
             str(requirements_file),
         ]
     )

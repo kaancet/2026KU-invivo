@@ -27,7 +27,6 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
-from urllib.request import urlretrieve
 
 # ============================================================================
 # Configuration
@@ -75,10 +74,16 @@ PROCESSED_DATA_DIR = DATA_DIR / "processed"
 #     "https://example.com/course-data/dataset.zip"
 # )
 #
-LARGE_DATA_URL = None
+# Public Google Drive share link (or file id) for the course-data zip.
+# No Drive mount is used — the zip is downloaded via gdown, so the notebook
+# never gets access to anyone's Drive.
+#
+# The zip MUST contain a top-level `data/` folder (data/processed, data/raw).
+# Create it locally with:   zip -r course_data.zip data
+LARGE_DATA_URL = "https://drive.google.com/file/d/1HBoaPmKmljGi0XI645oXc9d78KOM_gJg/view?usp=sharing"
 
-# File where the downloaded dataset will be stored.
-LARGE_DATA_FILE = RAW_DATA_DIR / "large_dataset.zip"
+# File where the downloaded dataset will be stored (removed after extraction).
+LARGE_DATA_FILE = REPO_DIR / "course_data.zip"
 
 
 # ============================================================================
@@ -390,46 +395,69 @@ def create_data_directories() -> None:
 
 def download_large_data() -> None:
     """
-    Download the optional large dataset.
+    Download the course-data zip from a public Google Drive link and
+    extract it into the repository (REPO_DIR/data).
 
-    The download is skipped if:
+    Uses gdown (handles Drive's large-file confirm token) — no Drive
+    mount, so the notebook never gets access to anyone's Drive.
 
-    1. No URL has been configured, or
-    2. The destination file already exists.
+    Skipped if the link is unconfigured or the data is already present.
     """
 
+    import zipfile
+
     print("\n" + "=" * 60)
-    print("Large dataset")
+    print("Course data")
     print("=" * 60)
 
-    if LARGE_DATA_URL is None:
-        print("No large dataset URL has been configured.")
-        print("Skipping large-data download.")
+    if not LARGE_DATA_URL or "PUT_ZIP_FILE_ID_HERE" in LARGE_DATA_URL:
+        print("No course-data link configured (LARGE_DATA_URL).")
+        print("Skipping data download.")
         return
 
-    if LARGE_DATA_FILE.exists():
-        print("Dataset already exists:")
-        print(LARGE_DATA_FILE)
+    if PROCESSED_DATA_DIR.exists() and any(PROCESSED_DATA_DIR.iterdir()):
+        print("Data already present:")
+        print(PROCESSED_DATA_DIR)
         print("\nSkipping download.")
         return
 
-    RAW_DATA_DIR.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    # gdown is preinstalled on Colab, but ensure it exists anyway.
+    run_command([sys.executable, "-m", "pip", "install", "--quiet", "gdown"])
+    import gdown
 
-    print("Downloading:")
+    print("Downloading course data (this can take a few minutes):")
     print(LARGE_DATA_URL)
 
-    print("\nDestination:")
-    print(LARGE_DATA_FILE)
-
-    urlretrieve(
-        LARGE_DATA_URL,
-        LARGE_DATA_FILE,
+    gdown.download(
+        url=LARGE_DATA_URL,
+        output=str(LARGE_DATA_FILE),
+        quiet=False,
+        fuzzy=True,
     )
 
-    print("\nLarge dataset downloaded successfully.")
+    if not LARGE_DATA_FILE.exists():
+        raise RuntimeError(
+            "gdown finished but the zip is missing. Check that the link is "
+            "public ('Anyone with the link') and points to the data zip."
+        )
+
+    print("\nExtracting into:")
+    print(REPO_DIR)
+
+    with zipfile.ZipFile(LARGE_DATA_FILE) as archive:
+        archive.extractall(REPO_DIR)
+
+    LARGE_DATA_FILE.unlink(missing_ok=True)
+
+    if not PROCESSED_DATA_DIR.exists():
+        raise RuntimeError(
+            f"Extraction finished but {PROCESSED_DATA_DIR} is missing. "
+            "The zip must contain a top-level `data/` folder "
+            "(make it with: zip -r course_data.zip data)."
+        )
+
+    print("\nCourse data ready:")
+    print(DATA_DIR)
 
 
 # ============================================================================

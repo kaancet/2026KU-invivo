@@ -311,6 +311,7 @@ def export_locked_requirements() -> Path:
     if requirements_file.exists():
         requirements_file.unlink()
 
+    # --no-hashes -> one line per package, so we can filter it below.
     # uv export defaults to requirements.txt format; the --format value name
     # differs across uv versions, so we omit it to stay version-robust.
     run_command(
@@ -318,6 +319,7 @@ def export_locked_requirements() -> Path:
             "uv",
             "export",
             "--frozen",
+            "--no-hashes",
             "--output-file",
             str(requirements_file),
         ],
@@ -327,10 +329,84 @@ def export_locked_requirements() -> Path:
     if not requirements_file.exists():
         raise RuntimeError("uv export completed, but the requirements file was not created.")
 
+    _filter_colab_infra(requirements_file)
+
     print("\nLocked requirements exported to:")
     print(requirements_file)
 
     return requirements_file
+
+
+# Packages Colab's runtime owns. Overwriting them breaks the kernel: e.g.
+# upgrading IPython makes google.colab (built for the old IPython) crash on
+# every kernel start. The course notebooks don't use these directly, so we
+# keep Colab's versions and only install the scientific stack on top.
+COLAB_OWNED_PACKAGES = {
+    "ipython",
+    "ipykernel",
+    "ipython-pygments-lexers",
+    "traitlets",
+    "jupyter-client",
+    "jupyter-core",
+    "jedi",
+    "parso",
+    "prompt-toolkit",
+    "pexpect",
+    "ptyprocess",
+    "matplotlib-inline",
+    "pyzmq",
+    "tornado",
+    "debugpy",
+    "comm",
+    "nest-asyncio",
+    "stack-data",
+    "executing",
+    "asttokens",
+    "pure-eval",
+    "pygments",
+    "wcwidth",
+    "decorator",
+    "psutil",
+}
+
+
+def _requirement_name(line: str) -> str:
+    """
+    Extract the lowercase package name from a requirements.txt line.
+    Handles `name==x`, `name @ git+...`, and environment markers.
+    """
+
+    text = line.strip()
+    for separator in ("==", " @", "@", ";", "<", ">", "!", "~", " "):
+        if separator in text:
+            text = text.split(separator, 1)[0]
+    return text.strip().lower()
+
+
+def _filter_colab_infra(requirements_file: Path) -> None:
+    """
+    Drop Colab-owned packages (see COLAB_OWNED_PACKAGES) from the export so
+    the install leaves Colab's Jupyter/IPython runtime intact.
+    """
+
+    kept = []
+    dropped = []
+
+    for line in requirements_file.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            kept.append(line)
+            continue
+        if _requirement_name(line) in COLAB_OWNED_PACKAGES:
+            dropped.append(_requirement_name(line))
+        else:
+            kept.append(line)
+
+    requirements_file.write_text("\n".join(kept) + "\n")
+
+    if dropped:
+        print("\nKept Colab's own versions of:")
+        print("    " + ", ".join(sorted(dropped)))
 
 
 def synchronize_environment(
@@ -347,6 +423,11 @@ def synchronize_environment(
     not in the requirements file, which would uninstall Colab's own
     packages (e.g. google-colab, needed for drive.mount) and break the
     runtime. install only adds/upgrades the pinned course packages.
+
+    --no-deps means we install exactly the (already filtered) list and
+    never pull a Colab-owned package (e.g. IPython) back in as a transitive
+    dependency. The exported lockfile already contains the full closure, so
+    nothing needed is missing.
     """
 
     print("\n" + "=" * 60)
@@ -359,6 +440,7 @@ def synchronize_environment(
             "pip",
             "install",
             "--system",
+            "--no-deps",
             "-r",
             str(requirements_file),
         ]

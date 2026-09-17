@@ -80,7 +80,7 @@ PROCESSED_DATA_DIR = DATA_DIR / "processed"
 #
 # The zip MUST contain a top-level `data/` folder (data/processed, data/raw).
 # Create it locally with:   zip -r course_data.zip data
-LARGE_DATA_URL = "https://drive.google.com/file/d/1HBoaPmKmljGi0XI645oXc9d78KOM_gJg/view?usp=sharing"
+LARGE_DATA_URL = "https://drive.google.com/file/d/17i0IMQ4_sa41p6u_xRpByE-cpVYWRLBK/view?usp=sharing"
 
 # File where the downloaded dataset will be stored (removed after extraction).
 LARGE_DATA_FILE = REPO_DIR / "course_data.zip"
